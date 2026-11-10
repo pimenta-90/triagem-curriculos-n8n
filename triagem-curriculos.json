@@ -1,0 +1,312 @@
+{
+  "name": "triagem-curriculos",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json['Currículo em PDF'].split('id=')[1] }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -64,
+        -224
+      ],
+      "id": "f4996543-0a3e-4b65-8dd7-e4170cdc5941",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Lo3RZRO53UsgarMf",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        -224
+      ],
+      "id": "af501fd7-8c8f-4511-83df-a0d3cbbef411",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.6-flash",
+          "mode": "list",
+          "cachedResultName": "Gemini 3.6 Flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Você é um assistente de triagem de currículos da área de Recursos Humanos. Sua tarefa é comparar o currículo do candidato com os requisitos da vaga e escrever um parecer que apoie a decisão de uma pessoa do RH.\n\nRegras obrigatórias:\n- Avalie apenas competências, experiência, formação e requisitos relacionados ao trabalho.\n- Não considere idade, gênero, estado civil, origem, aparência, religião, orientação sexual, filiação política, deficiência ou qualquer outro dado sem relação com o trabalho.\n- Use somente o que está escrito no currículo. Se uma informação exigida não aparecer, diga que não foi encontrada. Não presuma nem invente experiências ou formações.\n- Escreva em português do Brasil, de forma objetiva.\n- Não use asteriscos nem formatação Markdown. Escreva os títulos em texto simples, seguidos de dois-pontos.\n\nVaga: {{ $json.vaga }}\n\nRequisitos da vaga:\n{{ $json.requisitos }}\n\nCurrículo do candidato:\n{{ $('Extract from File').first().json.text }}\n\nResponda neste formato:\n\nResumo: uma ou duas frases sobre o perfil do candidato.\nPontos fortes: os requisitos atendidos, com o trecho do currículo que comprova cada um.\nLacunas: os requisitos obrigatórios não comprovados no currículo.\nAdequação: alta, média ou baixa, com uma frase justificando.\nNota: um número de 0 a 10, baseado apenas nos requisitos da vaga.\nObservação: lembre que a decisão final é humana."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        512,
+        -544
+      ],
+      "id": "f266f45b-99ad-4120-986f-e4e45d339a9b",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rycfGOuouI1TyTGn",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "seu-email@exemplo.com",
+        "subject": "=Parecer: {{ $('Loop Over Items').first().json['Nome completo'] }} - {{ $('Code in JavaScript').first().json.vaga }}",
+        "emailType": "text",
+        "message": "={{ $json.content.parts[0].text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        768,
+        -544
+      ],
+      "id": "e9e53f17-1f0d-40aa-8ab0-f1d6e9ebdbc8",
+      "name": "Send a message",
+      "webhookId": "60ef6477-2b0e-40cb-9c5a-22f4918a6b86",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "oDrK108CvPS76UbR",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_ID_DA_PLANILHA",
+          "mode": "list",
+          "cachedResultName": "Currículos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1448526540,
+          "mode": "list",
+          "cachedResultName": "Vaga",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit#gid=1448526540"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        -224
+      ],
+      "id": "d5bf891e-6907-43f3-b00b-fe72ff216738",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vDTev8TSLr4pmr0e",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega a vaga e os dados do candidato que está sendo processado agora\nconst candidato = $('Loop Over Items').first().json;\nconst vaga = candidato['Vaga pretendida'];\n\n// Requisitos vindos da aba Vaga\nconst linhasVaga = $input.all().map(item => item.json);\n\n// Confere se a coluna da vaga existe na aba Vaga\nif (!vaga || !(vaga in linhasVaga[0])) {\n  throw new Error(`Vaga não encontrada na aba Vaga: [${vaga}]`);\n}\n\n// Monta um texto com um requisito por linha\nconst requisitos = linhasVaga\n  .map(linha => `${linha['Campo']}: ${linha[vaga]}`)\n  .join('\\n');\n\nreturn [{ json: { vaga: vaga, requisitos: requisitos } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -224
+      ],
+      "id": "f95139a7-374c-4ee2-bb88-93a5412d837b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_ID_DA_PLANILHA",
+          "mode": "list",
+          "cachedResultName": "Currículos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 971122729,
+          "mode": "list",
+          "cachedResultName": "Respostas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit#gid=971122729"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -560
+      ],
+      "id": "5759db8a-6631-427f-a1bd-8eda38a7d82b",
+      "name": "Google Sheets Trigger",
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "LUbu1Qo2InBrjmvp",
+          "name": "Google Sheets Trigger account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -224,
+        -224
+      ],
+      "id": "fd24aaf1-a282-4aa6-b4a1-985f49454f1b",
+      "name": "Loop Over Items"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "0105e63b-a1f8-4c0b-8718-6c115d84ebab",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f2b39d3dc004f429efd9acdc36613dd0faec68c774291c1b869dc7e21abb6725"
+  },
+  "nodeGroups": [],
+  "id": "2gvby9w06ZRJKQt5",
+  "tags": []
+}
